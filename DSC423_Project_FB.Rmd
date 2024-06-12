@@ -1,0 +1,832 @@
+---
+title: "DATA CREW :: Project Facebook Data set Analysis"
+team: "DATA CREW"
+author: "JITEN / ERIK"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Libraries
+
+```{r Imports , message=FALSE}
+
+library(psych)
+library(corrplot)
+library(QuantPsyc)
+library(car)
+library(ggplot2)
+library(ggpubr)  
+
+```
+
+#### Import text file
+
+Column reference:
+<ul>
+<li> PTLike <- Page Total Likes
+<li> Type
+<li> Category (1,2,3 - product / action / inspiration)
+<li> PosMon <- Post Month
+<li> PosWkDay <- Post Weekday
+<li> PosHr <- Post Hour
+<li> Paid
+<li> LPTReach <- Lifetime Post Total Reach
+<li> LPTImpr <- Lifetime Post Total Impressions 
+<li> LEngUser <- Lifetime Engaged Users
+<li> LPConsumer <- Lifetime Post Consumers
+<li> LPConsump <- Lifetime Post Consumption
+<li> LPIPepLkPage <- Lifetime Post Impressions by people who have liked your Page
+<li> LPRchPepLKPage <- Lifetime Post reach by people who like your Page
+<li> LPepLkEngPos <- Lifetime People who have liked your Page and engaged with your post
+<li> comment
+<li> like
+<li> share
+<li> TotalInterac <- Total Interactions 
+</ul>
+
+```{r Project_read_csv }
+
+# read the csv file
+myd <- read.csv("dataset_Facebook.csv",sep = ";", header = T)
+
+# new columns name - refer to columns reference for full description
+colnames(myd) <- c('PTLike','Type','Category','PosMon','PosWkDay','PosHr','Paid',
+                   'LPTReach','LPTImpr','LEngUser','LPConsumer','LPConsump',
+                   'LPIPepLkPage','LPRchPepLKPage','LPepLkEngPos',
+                   'comment','like','share','TotalInterac')
+
+# display dataframe
+str(myd)
+
+```
+
+#### Data Cleaning / Wrangling
+
+```{r Project_data_cleaning }
+
+# remove null/na values
+myd <- na.omit(myd)
+
+# removing features used for evaluating post impact
+# and other not required variables
+myd <- myd[,-c(8:10)]
+myd <- myd[,-c(9:12)]
+myd <- myd[,-c(9:11)]
+
+# makes a copy of every variable in myd
+attach(myd)
+
+# create dummy variables
+# Type (Photos,Status,Video,Link)
+# category Factor: {action, product, inspiration }
+myd$typeP=(Type=="Photo")*1
+myd$typeS=(Type=="Status")*1
+myd$typeV=(Type=="Video")*1
+myd$category1=(Category==1)*1
+myd$category2=(Category==2)*1
+
+# remove a copy of every variable in myd
+detach(myd)
+
+# remove the column for which we created dummy variables
+# also removing comment,like,share since we have total interaction
+mydata <- myd[,-c(2:3)]
+
+```
+
+#### Explore Data
+
+```{r Project_explore_data }
+
+# describe the distribution of Life Time post consumers
+describe(mydata$LPConsumer)
+
+# describe the distribution of Page total likes
+describe(mydata$PTLike)
+
+# describe the distribution of totalInteraction
+describe(mydata$TotalInterac)
+
+```
+
+```{r plot_data, message=FALSE}
+
+# plot a histogram on the Y variable
+plot_hist_lpcf <- ggplot(mydata, aes(x=LPConsumer)) + 
+                  geom_histogram(bins = 30, color="black", fill="lightblue") +
+                  geom_vline(aes(xintercept=mean(LPConsumer)), col="darkblue") +
+                  labs(title = "Lifetime Post Consumers \n Histogram", 
+                       x = "Lifetime Post Consumers", y = 'Frequency') +
+                  # move the title text to the middle
+                  theme(plot.title=element_text(hjust=0.5)) +
+                  theme(text = element_text(size = 10))  +
+                  theme(axis.title = element_text(size = 10)) +
+                  theme(axis.text.x = element_text(angle = -45, hjust = .1))
+
+# since the histogram looks exponential we try log of Y variable
+plot_hist_lpcl <- ggplot(mydata, aes(x=log(LPConsumer))) + 
+                  geom_histogram(bins = 30, color="black", fill="lightblue") +
+                  geom_vline(aes(xintercept=mean(log(LPConsumer))), col="darkblue") +
+                  labs(title = "Lifetime \n Post Consumers \n Log Histogram", 
+                       x = "Log Lifetime Post Consumers", y = 'Frequency') +
+                  # move the title text to the middle
+                  theme(plot.title=element_text(hjust=0.5)) +
+                  theme(text = element_text(size = 10))  +
+                  theme(axis.title = element_text(size = 10)) +
+                  theme(axis.text.x = element_text(angle = -45, hjust = .1))
+
+# combine histogram plots
+hist_com_plot <- ggarrange(plot_hist_lpcf, plot_hist_lpcl,  
+                 labels = c("Fig A", "Fig B"),
+                 font.label = list(size = 9, color = "blue"))
+# plot all
+hist_com_plot
+
+# scatter plots for life time post consumers vs independent variables
+plot_scatter <- ggplot(mydata, aes(x = PTLike, y = log(LPConsumer))) +
+              geom_point() + 
+              labs(title="Life Time Post Consumer \n vs \n Page Total Likes",
+              x="Page Total Likes", y = "Lifetime Post Consumers") +
+              # move the title text to the middle
+              theme(plot.title=element_text(hjust=0.5)) +
+              theme(text = element_text(size = 10))  +
+              theme(axis.title = element_text(size = 10)) 
+
+# scatter plots for life time post consumers vs total interaction no log 
+plot_scatter_1 <- ggplot(mydata, aes(x = TotalInterac, y = log(LPConsumer))) +
+              geom_point() + 
+              labs(title="Life Time Post Consumer \n vs \n Total Interaction",
+              x="Total Interaction", y = "Lifetime Post Consumers") +
+              # move the title text to the middle
+              theme(plot.title=element_text(hjust=0.5)) +
+              theme(text = element_text(size = 10))  +
+              theme(axis.title = element_text(size = 10))
+
+
+# scatter plots for life time post consumers vs total interaction: log
+plot_scatter_2 <- ggplot(mydata, aes(x = log(TotalInterac), y = log(LPConsumer))) +
+              geom_point() + 
+              labs(title="Life Time Post Consumer \n vs \n Total Interaction",
+              x="Total Interaction", y = "Lifetime Post Consumers") +
+              # move the title text to the middle
+              theme(plot.title=element_text(hjust=0.5)) +
+              theme(text = element_text(size = 10))  +
+              theme(axis.title = element_text(size = 10)) 
+
+
+# Box plot Paid
+p_box_paid <- ggplot(mydata, aes(x=as.factor(Paid), y=log(LPConsumer), fill=Paid)) + 
+              geom_boxplot(alpha=0.8) + labs(x="Paid", y = "Life Time Post Comsumer") +
+              theme(legend.position="none") + theme(axis.title = element_text(size = 10))
+
+# we need to do something about this box plot - too busy
+p_box_hour <- ggplot(mydata, aes(x=as.factor(PosHr), y=log(LPConsumer), fill=PosHr)) + 
+              geom_boxplot(alpha=0.8) + labs(x="Post Hour", y = "Life Time Post Comsumer") +
+              theme(legend.position="none") + theme(axis.title = element_text(size = 10))
+
+# maybe we need to do something about this box plot - bit busy
+p_box_month <- ggplot(mydata, aes(x=as.factor(PosMon), y=log(LPConsumer), fill=PosMon)) + 
+          geom_boxplot(alpha=0.8) + labs(x="Post Month", y = "Life Time Post Comsumer") +
+          theme(legend.position="none") + theme(axis.title = element_text(size = 10))
+
+# week day post
+p_box_weekd <- ggplot(mydata, aes(x=as.factor(PosWkDay), y=log(LPConsumer), 
+          fill=PosWkDay)) + geom_boxplot(alpha=0.8) + labs(x="Post Weekday", 
+          y = "Life Time Post Comsumer") + theme(legend.position="none") +
+          theme(axis.title = element_text(size = 10))
+
+# combine histogram plots
+box_com_plot <- ggarrange(p_box_paid, p_box_hour, p_box_month, p_box_weekd, 
+                labels = c("Fig A", "Fig B", "Fig C", "Fig D"),
+                font.label = list(size = 9, color = "blue"))
+
+# scatter plot
+plot_scatter
+plot_scatter_1
+plot_scatter_2
+
+# plot all
+box_com_plot
+
+# correlation of the dataset  
+mydata_cor <- cor(mydata[, names(mydata) %in% c("PTLike", "LPConsumer", "TotalInterac")], 
+                  method = "pearson")
+
+corrplot(mydata_cor,type="lower", method = 'number', addCoef.col = 'brown',
+         number.cex = 0.8, tl.cex = 0.8)
+
+# display correlation values
+mydata_cor
+
+```
+
+### Model Building
+
+```{r model_building }
+
+# model including all relevant variables 
+fit_full_1 <- lm(log(LPConsumer) ~ PTLike + PosHr + Paid + log(TotalInterac) + typeP + typeS +
+                   typeV + category1 + category2, data=mydata)
+
+# summary of full model
+summary(fit_full_1) 
+
+```
+#sinks the data into connection as text file
+
+```{r variable_selection }
+
+# stepwise variable selection on the full result also gave same result 
+step(fit_full_1, direction = "backward", trace = FALSE)
+
+```
+
+```{r finalize_fit_full_model }
+
+# using stepwise variable selction
+fit_full_2 <- lm(formula = log(LPConsumer) ~ PTLike + Paid + log(TotalInterac) + 
+                   typeP + typeS + typeV + category1, data = mydata)
+
+
+# summary of full model
+summary(fit_full_2) 
+
+# analysis of variance
+anova(fit_full_2)
+
+
+# removing variable due to t-value & F-value: paid 
+fit_full_4 <- lm(formula = log(LPConsumer) ~ PTLike + log(TotalInterac) + 
+                   typeP + typeS + typeV + category1, data = mydata)
+
+# summary of full model
+summary(fit_full_4) 
+
+# analysis of variance
+anova(fit_full_4)
+
+# check multicollinearity
+vif(fit_full_4)
+
+# 95% confidence interval of the fitted model
+confint(fit_full_4, level=0.95)
+
+```
+
+#### Influential Points and Outliers
+
+```{r outliers_influential }
+
+# plot of deleted studentized residuals vs hat values
+student_hat <- data.frame(rstudent = rstudent(fit_full_4), hatvalues =  hatvalues(fit_full_4)) 
+
+# plot rstudent vs hatvalues
+student_hat_plot <- ggplot(student_hat, aes(x = hatvalues, y = rstudent)) + geom_point() +
+                    # Change line type and color
+                    geom_hline(yintercept=3, linetype="dashed", color = "red") +
+                    geom_hline(yintercept=-3, linetype="dashed", color = "red")
+
+# plot
+student_hat_plot
+
+# outliers |standardized residuals| > 3
+std_residual = data.frame(residual = rstandard(fit_full_4)) 
+
+# display |standardized residuals| > 3
+filter(std_residual, abs(residual) > 3)
+
+# historgram for outliers
+ggplot(std_residual, aes(x = residual)) + 
+  geom_histogram(bins=30, color="black", fill="lightblue") +
+  labs(title = "Lifetime Post Consumers \n Standarized Residual", x = "Standarized Residual", 
+       y = 'Frequency') +
+      geom_vline(xintercept = 3, linetype="dotted", 
+                color = "red") +
+      geom_vline(xintercept = -3, linetype="dotted", 
+                color = "red") +
+      # move the title text to the middle
+      theme(plot.title=element_text(hjust=0.5)) +
+      theme(text = element_text(size = 10))  +
+      theme(axis.title = element_text(size = 10)) 
+
+# print out only observations that may be influential 
+summary(influence.measures(fit_full_4))
+
+# influential Plot
+influencePlot(fit_full_4, scale=5, xlab="Hat-Values", ylab="Studentized Residuals", 
+              fill.col=carPalette()[2], fill.alpha=0.5, id=TRUE)
+
+```
+
+#### First Final Model
+
+```{r final_model_validation}
+
+# standardized beta coefficient 
+lm.beta(fit_full_4)
+
+# residual vs fitted Model
+residual_plot <-  ggplot(fit_full_4, aes(x = .fitted, y = .resid)) +
+                  geom_point() +
+                  geom_hline(yintercept = 0, col = "red") +
+                  labs(title="Fitted",
+                    x = "Fitted", y = "Residual") +
+                  # move the title text to the middle
+                  theme(plot.title=element_text(hjust=0.5))  +
+                  theme(text = element_text(size = 10))  +
+                  theme(axis.title = element_text(size = 10))
+
+# Page Total Likes vs residuals
+PTLike_plot <-  ggplot(mydata, aes(x = PTLike, 
+                y = rstandard(fit_full_4))) + geom_point() +
+                geom_hline(yintercept = 0, col = "red") +
+                labs(title="Page Total Likes",
+                x = "Page Total Likes", y = "Residual") +
+                # move the title text to the middle
+                theme(plot.title=element_text(hjust=0.5))  +
+                theme(text = element_text(size = 10))  +
+                theme(axis.title = element_text(size = 10))
+
+#create Q-Q plot
+qq_plot <-  ggplot(fit_full_4, aes(sample=rstandard(fit_full_4))) +
+                stat_qq(size=1.5, color='blue') + 
+                stat_qq_line(col = "red") +
+                labs(title="Q-Q Plot",
+                  x = "Theoretical Quantiles", y = "Sample Quantiles") +
+                # move the title text to the middle
+                theme(plot.title=element_text(hjust=0.5))  +
+                theme(text = element_text(size = 10))  +
+                theme(axis.title = element_text(size = 10))
+
+# combine all plots
+fit_final_plot <- ggarrange(residual_plot, PTLike_plot, qq_plot, 
+                 labels = c("Fig A", "Fig B", "Fig C"),
+                 font.label = list(size = 9, color = "blue"))
+# plot all
+fit_final_plot
+
+```
+
+#### Interaction Model Building
+
+```{r interaction_model_building}
+
+# model interaction of Paid with other independent variables
+fit_inter_Paid_full_1 <- lm(log(LPConsumer) ~ Paid*(PTLike  + typeP + typeS + log(TotalInterac) +
+                   typeV + category1) , data=mydata)
+
+# summary Report
+summary(fit_inter_Paid_full_1)
+
+```
+
+#### Interaction variable selection
+
+```{r interaction_variable_selection}
+
+# stepwise variable selection on the full interaction model
+step(fit_inter_Paid_full_1, direction = "backward", trace = FALSE)
+
+```
+
+```{r interaction_Paid_model}
+
+# selecting the model from stepwise backward variable selection process
+fit_inter_Paid_2 <- lm(formula = log(LPConsumer) ~ Paid + PTLike + typeP + typeS + 
+                log(TotalInterac) + typeV + category1, data = mydata)
+
+# after stepwise fit model 
+summary(fit_inter_Paid_2)
+
+# removing non significant variable paid
+fit_inter_Paid_3 <- lm(formula = log(LPConsumer) ~ PTLike + typeP + typeS + 
+                log(TotalInterac) + typeV + category1, data = mydata)
+
+# after stepwise fit model 
+summary(fit_inter_Paid_3)
+
+# analysis of variance
+anova(fit_inter_Paid_3)
+
+
+# 95% confidence interval of the fitted model
+confint(fit_inter_Paid_3, level=0.95)
+
+# influential Plot
+influencePlot(fit_inter_Paid_3)
+
+```
+
+#### Influential Points and Outliers
+
+```{r outliers_influential_Paid_inter }
+
+# plot of deleted studentized residuals vs hat values
+student_hat <- data.frame(rstudent = rstudent(fit_inter_Paid_3), hatvalues = 
+                            hatvalues(fit_inter_Paid_3)) 
+
+# plot rstudent vs hatvalues
+student_hat_plot <- ggplot(student_hat, aes(x = hatvalues, y = rstudent)) + geom_point() +
+                    # Change line type and color
+                    geom_hline(yintercept=3, linetype="dashed", color = "red") +
+                    geom_hline(yintercept=-3, linetype="dashed", color = "red")
+
+# plot
+student_hat_plot
+
+# outliers |standardized residuals| > 3
+std_residual = data.frame(residual = rstandard(fit_inter_Paid_3)) 
+
+# display |standardized residuals| > 3
+filter(std_residual, abs(residual) > 3)
+
+# historgram for outliers
+ggplot(std_residual, aes(x = residual)) + 
+  geom_histogram(bins=30, color="black", fill="lightblue") +
+  labs(title = "Lifetime Post Consumers \n Standarized Residual", x = "Standarized Residual", 
+       y = 'Frequency') +
+      geom_vline(xintercept = 3, linetype="dotted", 
+                color = "red") +
+      geom_vline(xintercept = -3, linetype="dotted", 
+                color = "red") +
+      # move the title text to the middle
+      theme(plot.title=element_text(hjust=0.5)) +
+      theme(text = element_text(size = 10))  +
+      theme(axis.title = element_text(size = 10)) 
+
+# print out only observations that may be influential 
+summary(influence.measures(fit_inter_Paid_3))
+
+# influential Plot
+influencePlot(fit_inter_Paid_3, scale=5, xlab="Hat-Values", ylab="Studentized Residuals",
+            fill.col=carPalette()[2], fill.alpha=0.5, id=TRUE)
+
+```
+
+### Model Interation Validation
+
+```{r fit_inter_final_2_validation}
+
+# residual vs fitted Model
+residual_plot <-  ggplot(fit_inter_Paid_3, aes(x = .fitted, y = .resid)) +
+                  geom_point() +
+                  geom_hline(yintercept = 0, col = "red") +
+                  labs(title="Fitted",
+                    x = "Fitted", y = "Residual") +
+                  # move the title text to the middle
+                  theme(plot.title=element_text(hjust=0.5))  +
+                  theme(text = element_text(size = 10))  +
+                  theme(axis.title = element_text(size = 10))
+
+# Page Total Likes vs residuals
+PTLike_Paid_plot <-  ggplot(mydata, aes(x = PTLike, y =rstandard(fit_inter_Paid_3))) +
+                geom_point() +
+                geom_hline(yintercept = 0, col = "red") +
+                labs(title="Page Total Likes",
+                x = "Page Total Likes", y = "Residual") +
+                # move the title text to the middle
+                theme(plot.title=element_text(hjust=0.5))  +
+                theme(text = element_text(size = 10))  +
+                theme(axis.title = element_text(size = 10))
+
+#create Q-Q plot
+qq_plot <-  ggplot(fit_inter_Paid_3, aes(sample=rstandard(fit_inter_Paid_3))) +
+                stat_qq(size=1.5, color='blue') + 
+                stat_qq_line(col = "red") +
+                labs(title="Q-Q Plot",
+                  x = "Theoretical Quantiles", y = "Sample Quantiles") +
+                # move the title text to the middle
+                theme(plot.title=element_text(hjust=0.5))  +
+                theme(text = element_text(size = 10))  +
+                theme(axis.title = element_text(size = 10))
+
+# combine all plots
+fit_inter_Paid_plot <- ggarrange(residual_plot, PTLike_Paid_plot, qq_plot, 
+                 labels = c("Fig A", "Fig B", "Fig C"),
+                 font.label = list(size = 9, color = "blue"))
+# plot all
+fit_inter_Paid_plot
+
+```
+
+#### Full Interaction Model
+
+```{r full_interaction_model}
+
+# full interaction model
+fit_full_interaction_1 <- lm(log(LPConsumer) ~ (PTLike + Paid + typeP + typeS + log(TotalInterac) +
+                          typeV + category1)^2 , data=mydata)
+
+# summary results
+summary(fit_full_interaction_1)
+
+```
+
+#### Full Interaction Variable Selection
+
+```{r full_interaction_variable_selection}
+
+# stepwise variable selection on the full interaction model
+step(fit_full_interaction_1, direction = "backward", trace = FALSE)
+
+```
+
+```{r full_interaction_varable_model}
+
+# selecting the model from stepwise backward variable selection process
+fit_full_interaction_2 <- lm(formula = log(LPConsumer) ~ PTLike + Paid + typeP + typeS + 
+                          log(TotalInterac) + typeV + category1 + PTLike:typeP + 
+                          PTLike:log(TotalInterac) + Paid:typeP + Paid:log(TotalInterac) +
+                          typeP:log(TotalInterac) +
+                          log(TotalInterac):category1, data = mydata)
+
+# after stepwise fit model 
+summary(fit_full_interaction_2)
+
+# analysis of variance
+anova(fit_full_interaction_2)
+
+
+# remove interaction variable due to F-value: Paid:typeP 
+fit_full_interaction_3 <- lm(formula = log(LPConsumer) ~ PTLike + Paid + typeP + typeS + 
+                          log(TotalInterac) + typeV + category1 + PTLike:typeP + 
+                          PTLike:log(TotalInterac) + Paid:log(TotalInterac) +
+                          typeP:log(TotalInterac) +
+                          log(TotalInterac):category1, data = mydata)
+
+# summary model display 
+summary(fit_full_interaction_3)
+
+# analysis of variance
+anova(fit_full_interaction_3)
+
+
+# remove interaction variable due to t-value: log(TotalInterac):category1
+fit_full_interaction_3_1 <- lm(formula = log(LPConsumer) ~ PTLike + Paid + typeP + typeS + 
+                        log(TotalInterac) + typeV + category1 + PTLike:typeP + 
+                          PTLike:log(TotalInterac) + Paid:log(TotalInterac) +
+                          typeP:log(TotalInterac) , data = mydata)
+
+# summary model display 
+summary(fit_full_interaction_3_1)
+
+# remove interaction variable due to t-value: Paid:log(TotalInterac)
+fit_full_interaction_3_2 <- lm(formula = log(LPConsumer) ~ PTLike + Paid + typeP + typeS + 
+                          log(TotalInterac) + typeV + category1 + PTLike:typeP + 
+                          PTLike:log(TotalInterac) +
+                          typeP:log(TotalInterac) , data = mydata)
+
+# summary model display 
+summary(fit_full_interaction_3_2)
+
+# remove interaction variable due to t-value: Paid since interaction is gone
+fit_full_interaction_4 <- lm(formula = log(LPConsumer) ~ PTLike + typeP + typeS + 
+                          log(TotalInterac) + typeV + category1 + PTLike:typeP + 
+                          PTLike:log(TotalInterac) +
+                          typeP:log(TotalInterac) , data = mydata)
+
+# summary model display 
+summary(fit_full_interaction_4)
+
+# equation
+equatiomatic::extract_eq(fit_full_interaction_4, use_coefs = TRUE)
+
+# analysis of variance
+anova(fit_full_interaction_4)
+
+# 95% confidence interval of the fitted model
+confint(fit_full_interaction_4, level=0.95)
+
+# influential Plot
+influencePlot(fit_full_interaction_4)
+
+lm.beta(fit_full_interaction_4)
+
+```
+
+#### Full Interaction Influential Points and Outliers
+
+```{r outliers_influential_Full_inter }
+
+# plot of deleted studentized residuals vs hat values
+student_hat <- data.frame(rstudent = rstudent(fit_full_interaction_4), hatvalues = 
+                            hatvalues(fit_full_interaction_4)) 
+
+# plot rstudent vs hatvalues
+student_hat_plot <- ggplot(student_hat, aes(x = hatvalues, y = rstudent)) + geom_point() +
+                    # Change line type and color
+                    geom_hline(yintercept=3, linetype="dashed", color = "red") +
+                    geom_hline(yintercept=-3, linetype="dashed", color = "red")
+
+# plot
+student_hat_plot
+
+# outliers |standardized residuals| > 3
+std_residual = data.frame(residual = rstandard(fit_full_interaction_4)) 
+
+# display |standardized residuals| > 3
+filter(std_residual, abs(residual) > 3)
+
+# historgram for outliers
+ggplot(std_residual, aes(x = residual)) + 
+  geom_histogram(bins=30, color="black", fill="lightblue") +
+  labs(title = "Lifetime Post Consumers \n Standarized Residual", x = "Standarized Residual", 
+       y = 'Frequency') +
+      geom_vline(xintercept = 3, linetype="dotted", 
+                color = "red") +
+      geom_vline(xintercept = -3, linetype="dotted", 
+                color = "red") +
+      # move the title text to the middle
+      theme(plot.title=element_text(hjust=0.5)) +
+      theme(text = element_text(size = 10))  +
+      theme(axis.title = element_text(size = 10)) 
+
+# print out only observations that may be influential 
+summary(influence.measures(fit_full_interaction_4))
+
+# influential Plot
+influencePlot(fit_full_interaction_4, scale=5, xlab="Hat-Values", 
+              ylab="Studentized Residuals",
+              fill.col=carPalette()[2], fill.alpha=0.5, id=TRUE)
+
+```
+
+### Full Interaction Model Validation
+
+```{r fit_full_inter_final_4_validation}
+
+# residual vs fitted Model
+residual_plot <-  ggplot(fit_full_interaction_4, aes(x = .fitted, y = .resid)) +
+                  geom_point() +
+                  geom_hline(yintercept = 0, col = "red") +
+                  labs(title="Fitted",
+                    x = "Fitted", y = "Residual") +
+                  # move the title text to the middle
+                  theme(plot.title=element_text(hjust=0.5))  +
+                  theme(text = element_text(size = 10))  +
+                  theme(axis.title = element_text(size = 10))
+
+# Page Total Likes vs residuals
+PTLike_Full_plot <- ggplot(mydata, aes(x = PTLike, y =rstandard(fit_full_interaction_4))) +
+                geom_point() +
+                geom_hline(yintercept = 0, col = "red") +
+                labs(title="Page Total Likes",
+                x = "Page Total Likes", y = "Residual") +
+                # move the title text to the middle
+                theme(plot.title=element_text(hjust=0.5))  +
+                theme(text = element_text(size = 10))  +
+                theme(axis.title = element_text(size = 10))
+
+#create Q-Q plot
+qq_plot <- ggplot(fit_full_interaction_4, aes(sample=rstandard(fit_full_interaction_4))) +
+                stat_qq(size=1.5, color='blue') + 
+                stat_qq_line(col = "red") +
+                labs(title="Q-Q Plot",
+                  x = "Theoretical Quantiles", y = "Sample Quantiles") +
+                # move the title text to the middle
+                theme(plot.title=element_text(hjust=0.5))  +
+                theme(text = element_text(size = 10))  +
+                theme(axis.title = element_text(size = 10))
+
+# combine all plots
+fit_inter_Paid_plot <- ggarrange(residual_plot, PTLike_Paid_plot, qq_plot, 
+                 labels = c("Fig A", "Fig B", "Fig C"),
+                 font.label = list(size = 9, color = "blue"))
+# plot all
+fit_inter_Paid_plot
+
+```
+
+#### Model Validation
+
+```{r model_validation_train_test}
+
+# setting the seed to get the same result when knit
+set.seed(2500)
+
+# split samples (75% for training and 25% for testing)
+select.mydata <- sample(1:nrow(mydata), 0.75*nrow(mydata))
+
+# selecting 75% of the data for training purpose
+train.mydata <- mydata[select.mydata,]
+
+# selecting 25% (remaining) of the data for testing
+test.mydata <- mydata[-select.mydata,]
+
+
+# Model: 1 : fit_full_4
+fit_m1_trn <- lm(formula = log(LPConsumer) ~ PTLike + log(TotalInterac) + 
+                   typeP + typeS + typeV + category1, data = train.mydata)
+
+# summary of fit_m1_trn
+summary(fit_m1_trn)
+
+# create fitted values using test.mydata
+y_pred <- predict.glm(fit_m1_trn,test.mydata)
+y_obs  <- log(test.mydata[,"LPConsumer"])
+
+# validation statistics
+# RMSE of prediction error
+rmse_m1 <-sqrt((y_obs-y_pred)%*%(y_obs-y_pred)/nrow(test.mydata))
+
+# compute MAE
+mae_m1 <- mean(abs(y_obs-y_pred))
+
+# compute MAPE
+mape_m1 <- mean(abs((y_obs-y_pred)/y_obs))*100
+
+# compute cross-validated R^2_pred
+r2_pred  <-  cor(cbind(y_obs,y_pred))**2
+r2_train <-  summary(fit_m1_trn)$r.squared
+diffr2_m1 <- abs(r2_train-r2_pred)
+
+# print difference of cross-validate R2 and R2
+# diffr2_m1[1,2]
+
+
+ # Model: 2 : fit_inter_Paid_3
+ fit_int_m1_trn <- lm(formula = log(LPConsumer) ~ PTLike + typeP + typeS + 
+                log(TotalInterac) + typeV + category1, data = train.mydata)
+
+ # summary of fit_int_m1_trn
+ summary(fit_int_m1_trn)
+#
+# create fitted values using test.mydata
+y_pred2 <- predict.glm(fit_int_m1_trn,test.mydata)
+y_obs2  <- log(test.mydata[,"LPConsumer"])
+
+# # validation statistics
+# # RMSE of prediction error
+rmse_m1_2 <-sqrt((y_obs2-y_pred2)%*%(y_obs2-y_pred2)/nrow(test.mydata))
+
+# compute MAE
+mae_m1_2 <- mean(abs(y_obs2-y_pred2))
+
+# compute MAPE
+mape_m1_2 <- mean(abs((y_obs2-y_pred2)/y_obs2))*100
+#
+# compute cross-validated R^2_pred
+r2_pred2    <-  cor(cbind(y_obs2,y_pred2))**2
+r2_train2   <-  summary(fit_int_m1_trn)$r.squared
+diffr2_m1_2 <- abs(r2_train2-r2_pred2)
+
+
+# print difference of cross-validate R2 and R2
+# diffr2_m1_2[1,2]
+
+
+# Model 3 : fit_full_interaction_4
+fit_int_m2_trn <- lm(formula = log(LPConsumer) ~ PTLike + typeP + typeS + 
+                          log(TotalInterac) + typeV + category1 + PTLike:typeP + 
+                          PTLike:log(TotalInterac) +
+                          typeP:log(TotalInterac), data = train.mydata)
+
+# summary of fit_full_interaction_4
+summary(fit_int_m2_trn)
+
+# create fitted values using test.mydata
+y_pred3 <- predict.glm(fit_int_m2_trn,test.mydata)
+y_obs3  <- log(test.mydata[,"LPConsumer"])
+
+# validation statistics
+# RMSE of prediction error
+rmse_m3 <- sqrt((y_obs3-y_pred3)%*%(y_obs3-y_pred3)/nrow(test.mydata))
+
+# compute MAE
+mae_m3 <- mean(abs(y_obs3-y_pred3))
+
+# compute MAPE
+mape_m3 <- mean(abs((y_obs3-y_pred3)/y_obs3))*100
+
+# compute cross-validated R^2_pred
+r2_pred3  <- cor(cbind(y_obs3,y_pred3))**2
+r2_train3 <- summary(fit_int_m2_trn)$r.squared
+#diffr2_m3 <- abs(r2_train3-r2_pred3)
+
+# print difference of cross-validate R2 and R2
+# diffr2_m3[1,2]
+
+# create dataframe
+Model   <-  c("fit_m1_trn", "fit_inter_Paid_3","fit_full_interaction_4")
+RMSE    <-  c(rmse_m1, rmse_m1_2, rmse_m3)
+MAE     <-  c(mae_m1, mae_m1_2, mae_m3)
+MAPE    <-  c(mape_m1, mape_m1_2, mape_m3)
+#Diff_R2 <-  c(diffr2_m1[1,2], diffr2_m1_2[1,2], diffr2_m3[1,2])
+
+df <- data.frame(Model, RMSE, MAE, MAPE)
+
+# print Model Info
+df
+
+
+#                   Model      RMSE       MAE     MAPE
+#1             fit_m1_trn 0.5048645 0.3842943 6.209016
+#2       fit_inter_Paid_3 0.5048645 0.3842943 6.209016
+#3 fit_full_interaction_4 0.4768748 0.3701487 6.000214
+
+# Model 3 (fit_full_interaction_4) minimizes all three validation matrics and we can conclude that it provides more accurate prediction which is closer to actual values
+```
